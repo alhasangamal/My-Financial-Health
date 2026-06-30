@@ -72,6 +72,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser({ id: uId, email: `${activePortfolio}@financialhealth.com` });
     setIsGuest(true);
     setLoading(false);
+
+    // Sync profile online to avoid foreign key violations
+    const syncProfileOnline = async () => {
+      if (isSupabaseConfigured() && supabase) {
+        try {
+          await supabase.from('profiles').upsert([prof]);
+        } catch (e) {
+          console.error('Failed to sync profile online:', e);
+        }
+      }
+    };
+    syncProfileOnline();
   }, [activePortfolio]);
 
   const setActivePortfolio = (port: string) => {
@@ -102,24 +114,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateProfile = async (updates: Partial<Profile>) => {
-    if (isGuest || !supabase) {
-      const updated = { ...profile, ...updates } as Profile;
-      setProfile(updated);
-      localStorage.setItem(`guest_profile_${activePortfolio}`, JSON.stringify(updated));
-      return;
-    }
+    const updated = { ...profile, ...updates } as Profile;
+    setProfile(updated);
+    localStorage.setItem(`guest_profile_${activePortfolio}`, JSON.stringify(updated));
 
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update(updates)
-        .eq('id', user?.id);
-
-      if (error) throw error;
-      setProfile((prev) => (prev ? { ...prev, ...updates } : null));
-    } catch (e) {
-      console.error('Failed to update profile', e);
-      throw e;
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { error } = await supabase.from('profiles').upsert([updated]);
+        if (error) throw error;
+      } catch (e) {
+        console.error('Failed to sync profile updates to Supabase:', e);
+      }
     }
   };
 
