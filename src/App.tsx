@@ -130,89 +130,64 @@ const MainAppContent: React.FC = () => {
   // Trigger data updates
   const refreshData = () => setRefreshTrigger(prev => prev + 1);
 
+  // Database Action Wrapper with Error Alerting
+  const handleDbAction = async (action: () => Promise<any>) => {
+    try {
+      await action();
+      refreshData();
+    } catch (err: any) {
+      console.error('Database operation failed:', err);
+      alert(language === 'ar' 
+        ? `⚠️ فشل الاتصال أو الحفظ في قاعدة البيانات:\n${err.message || err.details || JSON.stringify(err)}\n\nتأكد من إعداد الجداول بشكل صحيح في Supabase وتعطيل حماية RLS لتمكين الوصول العام للضيف (Guest).`
+        : `⚠️ Database action failed:\n${err.message || err.details || JSON.stringify(err)}\n\nMake sure Supabase tables are created and RLS is disabled to allow public guest access.`);
+    }
+  };
+
   // CRUDS Triggers
-  const handleAddIncome = async (inc: Omit<IncomeSource, 'id' | 'created_at'>) => {
-    await db.addIncome(inc);
-    refreshData();
-  };
-  const handleEditIncome = async (id: string, updates: Partial<IncomeSource>) => {
-    await db.updateIncome(id, updates);
-    refreshData();
-  };
-  const handleDeleteIncome = async (id: string) => {
-    await db.deleteIncome(id);
-    refreshData();
-  };
+  const handleAddIncome = (inc: Omit<IncomeSource, 'id' | 'created_at'>) => 
+    handleDbAction(() => db.addIncome(inc));
+  const handleEditIncome = (id: string, updates: Partial<IncomeSource>) => 
+    handleDbAction(() => db.updateIncome(id, updates));
+  const handleDeleteIncome = (id: string) => 
+    handleDbAction(() => db.deleteIncome(id));
 
-  const handleAddExpense = async (exp: Omit<Expense, 'id' | 'created_at'>) => {
-    await db.addExpense(exp);
-    refreshData();
-  };
-  const handleEditExpense = async (id: string, updates: Partial<Expense>) => {
-    await db.updateExpense(id, updates);
-    refreshData();
-  };
-  const handleDeleteExpense = async (id: string) => {
-    await db.deleteExpense(id);
-    refreshData();
-  };
+  const handleAddExpense = (exp: Omit<Expense, 'id' | 'created_at'>) => 
+    handleDbAction(() => db.addExpense(exp));
+  const handleEditExpense = (id: string, updates: Partial<Expense>) => 
+    handleDbAction(() => db.updateExpense(id, updates));
+  const handleDeleteExpense = (id: string) => 
+    handleDbAction(() => db.deleteExpense(id));
 
-  const handleAddDebt = async (debt: Omit<Debt, 'id' | 'created_at'>) => {
-    await db.addDebt(debt);
-    refreshData();
-  };
-  const handleEditDebt = async (id: string, updates: Partial<Debt>) => {
-    await db.updateDebt(id, updates);
-    refreshData();
-  };
-  const handleDeleteDebt = async (id: string) => {
-    await db.deleteDebt(id);
-    refreshData();
-  };
+  const handleAddDebt = (debt: Omit<Debt, 'id' | 'created_at'>) => 
+    handleDbAction(() => db.addDebt(debt));
+  const handleEditDebt = (id: string, updates: Partial<Debt>) => 
+    handleDbAction(() => db.updateDebt(id, updates));
+  const handleDeleteDebt = (id: string) => 
+    handleDbAction(() => db.deleteDebt(id));
 
-  const handleAddAsset = async (asset: Omit<Asset, 'id' | 'created_at'>) => {
-    await db.addAsset(asset);
-    refreshData();
-  };
-  const handleEditAsset = async (id: string, updates: Partial<Asset>) => {
-    await db.updateAsset(id, updates);
-    refreshData();
-  };
-  const handleDeleteAsset = async (id: string) => {
-    await db.deleteAsset(id);
-    refreshData();
-  };
+  const handleAddAsset = (asset: Omit<Asset, 'id' | 'created_at'>) => 
+    handleDbAction(() => db.addAsset(asset));
+  const handleEditAsset = (id: string, updates: Partial<Asset>) => 
+    handleDbAction(() => db.updateAsset(id, updates));
+  const handleDeleteAsset = (id: string) => 
+    handleDbAction(() => db.deleteAsset(id));
 
-  const handleAddReserve = async (res: Omit<EmergencyReserve, 'id' | 'created_at'>) => {
-    await db.addReserve(res);
-    refreshData();
-  };
-  const handleEditReserve = async (id: string, updates: Partial<EmergencyReserve>) => {
-    await db.updateReserve(id, updates);
-    refreshData();
-  };
-  const handleDeleteReserve = async (id: string) => {
-    await db.deleteReserve(id);
-    refreshData();
-  };
+  const handleAddReserve = (res: Omit<EmergencyReserve, 'id' | 'created_at'>) => 
+    handleDbAction(() => db.addReserve(res));
+  const handleEditReserve = (id: string, updates: Partial<EmergencyReserve>) => 
+    handleDbAction(() => db.updateReserve(id, updates));
+  const handleDeleteReserve = (id: string) => 
+    handleDbAction(() => db.deleteReserve(id));
 
-  const handleAddGoal = async (goal: Omit<FinancialGoal, 'id' | 'created_at'>) => {
-    await db.addGoal(goal);
-    refreshData();
-  };
-  const handleEditGoal = async (id: string, updates: Partial<FinancialGoal>) => {
-    await db.updateGoal(id, updates);
-    refreshData();
-  };
-  const handleDeleteGoal = async (id: string) => {
-    await db.deleteGoal(id);
-    refreshData();
-  };
+  const handleAddGoal = (goal: Omit<FinancialGoal, 'id' | 'created_at'>) => 
+    handleDbAction(() => db.addGoal(goal));
+  const handleEditGoal = (id: string, updates: Partial<FinancialGoal>) => 
+    handleDbAction(() => db.updateGoal(id, updates));
+  const handleDeleteGoal = (id: string) => 
+    handleDbAction(() => db.deleteGoal(id));
 
-  const handleCompleteReminder = async (id: string) => {
-    await db.updateReminder(id, { is_completed: true });
-    refreshData();
-  };
+  const handleCompleteReminder = (id: string) => 
+    handleDbAction(() => db.updateReminder(id, { is_completed: true }));
 
   // Convert EGP installment for summary metrics (needs to be converted to baseCurrency)
   // Re-fetch EGP rate
