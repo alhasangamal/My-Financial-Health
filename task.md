@@ -1,0 +1,23 @@
+# Task List - My Financial Health
+
+- `[x]` Initialize Vite React TS project
+- `[x]` Install dependencies (Tailwind, Recharts, Lucide, Framer Motion, Supabase, etc.)
+- `[x]` Configure Tailwind CSS (Tailwind CSS v4 with Vite integration)
+- `[x]` Write TypeScript interfaces (`src/types/index.ts`)
+- `[x]` Implement Translation dictionaries (`src/utils/translations.ts`)
+- `[x]` Implement Language, Theme, and Auth Contexts (`src/context/`)
+- `[x]` Write Financial Health Calculations helper (`src/utils/calculations.ts`)
+- `[x]` Create DB Access Layer with local fallback (`src/services/db.ts`)
+- `[x]` Build App Layout with collapsible Arabic-first Sidebar (`src/components/Layout/Sidebar.tsx`)
+- `[x]` Build Auth login/signup screen (`src/components/Auth.tsx`)
+- `[x]` Build Dashboard page (`src/components/Dashboard/`)
+- `[x]` Build Income page (`src/components/Income/`)
+- `[x]` Build Expenses page (`src/components/Expenses/`)
+- `[x]` Build Debts and Installments page (`src/components/Debts/`)
+- `[x]` Build Assets and Savings page (`src/components/Assets/`)
+- `[x]` Build Emergency Reserve page (`src/components/Reserve/`)
+- `[x]` Build Financial Goals page (`src/components/Goals/`)
+- `[x]` Build Scenario Simulator page (`src/components/Scenarios/`)
+- `[x]` Build Reports page (`src/components/Reports/`)
+- `[x]` Build Settings page (`src/components/Settings/`)
+- `[x]` Verify build and run local checks
