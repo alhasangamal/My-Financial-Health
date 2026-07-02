@@ -2,7 +2,9 @@ import React from 'react';
 import { useTranslation } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
 import { CurrencyCode } from '../../types';
-import { Sun, Moon, Coins, Languages, Calendar } from 'lucide-react';
+import { Sun, Moon, Coins, Languages, Calendar, Cloud, CloudOff, HardDrive } from 'lucide-react';
+
+type SyncStatus = 'connected' | 'degraded' | 'local';
 
 interface HeaderProps {
   activeTab: string;
@@ -12,6 +14,7 @@ interface HeaderProps {
   selectedYear: number;
   onMonthChange: (month: number) => void;
   onYearChange: (year: number) => void;
+  syncStatus: SyncStatus;
 }
 
 const MONTHS = [
@@ -32,6 +35,12 @@ const MONTHS = [
 const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: 7 }, (_, i) => currentYear - 3 + i);
 
+const SYNC_CONFIG: Record<SyncStatus, { color: string; pulse: boolean; labelAr: string; labelEn: string; Icon: React.FC<any> }> = {
+  connected: { color: 'bg-emerald-400', pulse: true, labelAr: 'متصل بالسحابة', labelEn: 'Cloud Synced', Icon: Cloud },
+  degraded: { color: 'bg-amber-400', pulse: true, labelAr: 'حفظ محلي مؤقت', labelEn: 'Local Fallback', Icon: CloudOff },
+  local: { color: 'bg-slate-400', pulse: false, labelAr: 'وضع الضيف (محلي)', labelEn: 'Guest Mode', Icon: HardDrive },
+};
+
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
   currentCurrency,
@@ -40,6 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
   selectedYear,
   onMonthChange,
   onYearChange,
+  syncStatus,
 }) => {
   const { t, language, setLanguage, dir } = useTranslation();
   const { theme, toggleTheme } = useTheme();
@@ -79,8 +89,27 @@ export const Header: React.FC<HeaderProps> = ({
         </span>
       </div>
 
-      {/* Header Actions (Date, Currency, Theme, Language) */}
+      {/* Header Actions (Sync Status, Date, Currency, Theme, Language) */}
       <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-center sm:justify-end text-xs">
+        {/* Sync Status Indicator */}
+        {(() => {
+          const cfg = SYNC_CONFIG[syncStatus];
+          const SyncIcon = cfg.Icon;
+          return (
+            <div className="flex items-center gap-1.5 group relative cursor-default" title={isAr ? cfg.labelAr : cfg.labelEn}>
+              <div className="relative">
+                <span className={`block w-2.5 h-2.5 rounded-full ${cfg.color} ${cfg.pulse ? 'animate-pulse' : ''}`} />
+              </div>
+              <SyncIcon className={`w-3.5 h-3.5 ${syncStatus === 'connected' ? 'text-emerald-500' : syncStatus === 'degraded' ? 'text-amber-500' : 'text-slate-400'}`} />
+              <span className={`text-[10px] font-semibold ${syncStatus === 'connected' ? 'text-emerald-500' : syncStatus === 'degraded' ? 'text-amber-500' : 'text-slate-400'}`}>
+                {isAr ? cfg.labelAr : cfg.labelEn}
+              </span>
+            </div>
+          );
+        })()}
+
+        {/* Divider */}
+        <div className="h-6 w-px bg-slate-800/10 dark:bg-slate-800/60" />
         {/* Month/Year Selector */}
         <div className="flex items-center gap-1.5">
           <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/10">

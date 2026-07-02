@@ -3,7 +3,7 @@ import { useTranslation } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { getExchangeRates, saveExchangeRates } from '../../services/db';
-import { Sparkles, Save, ShieldAlert, Globe, Coins, ShieldCheck, Database, Info } from 'lucide-react';
+import { Sparkles, Save, ShieldAlert, Globe, Coins, ShieldCheck, Database, Info, TrendingUp } from 'lucide-react';
 import { DEFAULT_EXCHANGE_RATES } from '../../utils/calculations';
 
 interface SettingsProps {
@@ -40,6 +40,9 @@ export const Settings: React.FC<SettingsProps> = ({ onRefreshData }) => {
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Inflation Rate State (saved in localStorage, used by AI forecasting)
+  const [inflationRate, setInflationRate] = useState<string>(() => localStorage.getItem('my_fin_health_inflation_rate') || '12');
+
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     setSuccessMsg(null);
@@ -65,6 +68,9 @@ export const Settings: React.FC<SettingsProps> = ({ onRefreshData }) => {
       // Save Automated WhatsApp API Configuration
       localStorage.setItem('whatsapp_api_url', whatsappApiUrl.trim());
       localStorage.setItem('whatsapp_api_token', whatsappApiToken.trim());
+
+      // Save Inflation Rate
+      localStorage.setItem('my_fin_health_inflation_rate', String(parseFloat(inflationRate) || 12));
 
       // 3. Save Supabase credentials to LocalStorage
       const oldUrl = localStorage.getItem('supabase_custom_url') || '';
@@ -192,6 +198,28 @@ export const Settings: React.FC<SettingsProps> = ({ onRefreshData }) => {
                 <option value="ar">العربية (RTL)</option>
                 <option value="en">English (LTR)</option>
               </select>
+            </div>
+
+            {/* Expected Annual Inflation Rate */}
+            <div className="space-y-1.5">
+              <label className="opacity-80 flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 text-amber-500" />
+                {isAr ? 'معدل التضخم السنوي المتوقع (%)' : 'Expected Annual Inflation Rate (%)'}
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="100"
+                value={inflationRate}
+                onChange={(e) => setInflationRate(e.target.value)}
+                placeholder="12"
+                className={`w-full p-2.5 rounded-xl border focus:ring-1 focus:ring-emerald-500 focus:outline-none
+                  ${theme === 'dark' ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
+              />
+              <span className="text-[10px] opacity-50">
+                {isAr ? 'يُستخدم في توقعات الذكاء الاصطناعي لتعديل النفقات المستقبلية' : 'Used by AI forecasting to adjust future expense projections'}
+              </span>
             </div>
 
             {/* WhatsApp Phone Number */}

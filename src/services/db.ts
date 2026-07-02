@@ -296,390 +296,300 @@ const writeLocal = <T>(key: string, items: T[]) => {
   localStorage.setItem(key, JSON.stringify(items));
 };
 
+// ─── Cloud Sync Status Tracking ───────────────────────────────────────────────
+type SyncStatus = 'connected' | 'degraded' | 'local';
+type SyncListener = (status: SyncStatus) => void;
+
+let _syncStatus: SyncStatus = isSupabaseConfigured() ? 'connected' : 'local';
+const _syncListeners: SyncListener[] = [];
+
+const setSyncStatus = (status: SyncStatus) => {
+  if (_syncStatus !== status) {
+    _syncStatus = status;
+    _syncListeners.forEach(fn => fn(status));
+  }
+};
+
+export const getSyncStatus = (): SyncStatus => _syncStatus;
+
+export const subscribeToSyncStatus = (listener: SyncListener): (() => void) => {
+  _syncListeners.push(listener);
+  return () => {
+    const idx = _syncListeners.indexOf(listener);
+    if (idx >= 0) _syncListeners.splice(idx, 1);
+  };
+};
+
+// Helper: Try a Supabase operation and fall back to LocalStorage on failure.
+// For "get" (read) operations, pass a localFallback that returns the data.
+// For "write" operations, pass a localFallback that performs the write.
+const trySupabase = async <T>(
+  supabaseOp: () => Promise<{ data: T | null; error: any }>,
+  localFallback: () => T
+): Promise<T> => {
+  if (!isSupabaseConfigured() || !supabase) {
+    return localFallback();
+  }
+  try {
+    const { data, error } = await supabaseOp();
+    if (error) {
+      console.warn('Supabase operation failed, falling back to LocalStorage:', error.message);
+      setSyncStatus('degraded');
+      return localFallback();
+    }
+    setSyncStatus('connected');
+    return data as T;
+  } catch (err: any) {
+    console.warn('Supabase exception, falling back to LocalStorage:', err?.message || err);
+    setSyncStatus('degraded');
+    return localFallback();
+  }
+};
+
+// Helper for write operations that don't return data
+const trySupabaseWrite = async (
+  supabaseOp: () => Promise<{ error: any }>,
+  localFallback: () => void
+): Promise<void> => {
+  if (!isSupabaseConfigured() || !supabase) {
+    localFallback();
+    return;
+  }
+  try {
+    const { error } = await supabaseOp();
+    if (error) {
+      console.warn('Supabase write failed, falling back to LocalStorage:', error.message);
+      setSyncStatus('degraded');
+      localFallback();
+      return;
+    }
+    setSyncStatus('connected');
+  } catch (err: any) {
+    console.warn('Supabase write exception, falling back to LocalStorage:', err?.message || err);
+    setSyncStatus('degraded');
+    localFallback();
+  }
+};
+
 // Repository Functions
 export const db = {
   // Profiles
   async getProfile(userId: string): Promise<Profile | null> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
-      if (error) return null;
-      return data;
-    }
-    const profile = localStorage.getItem('guest_profile');
-    return profile ? JSON.parse(profile) : null;
+    return trySupabase<Profile | null>(
+      () => supabase!.from('profiles').select('*').eq('id', userId).single(),
+      () => { const p = localStorage.getItem('guest_profile'); return p ? JSON.parse(p) : null; }
+    );
   },
 
   // Income Sources
   async getIncomes(userId: string): Promise<IncomeSource[]> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('income_sources').select('*').eq('user_id', userId);
-      if (error) return [];
-      return data;
-    }
-    return readLocal<IncomeSource>(KEYS.INCOMES);
+    return trySupabase<IncomeSource[]>(
+      () => supabase!.from('income_sources').select('*').eq('user_id', userId),
+      () => readLocal<IncomeSource>(KEYS.INCOMES)
+    );
   },
 
   async addIncome(income: Omit<IncomeSource, 'id' | 'created_at'>): Promise<IncomeSource> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('income_sources').insert([income]).select().single();
-      if (error) throw error;
-      return data;
-    }
-    const list = readLocal<IncomeSource>(KEYS.INCOMES);
-    const newIncome: IncomeSource = {
-      ...income,
-      id: `inc-${Date.now()}`,
-      created_at: new Date().toISOString()
+    const localFallback = () => {
+      const list = readLocal<IncomeSource>(KEYS.INCOMES);
+      const newIncome: IncomeSource = { ...income, id: `inc-${Date.now()}`, created_at: new Date().toISOString() };
+      list.push(newIncome);
+      writeLocal(KEYS.INCOMES, list);
+      return newIncome;
     };
-    list.push(newIncome);
-    writeLocal(KEYS.INCOMES, list);
-    return newIncome;
+    return trySupabase<IncomeSource>(
+      () => supabase!.from('income_sources').insert([income]).select().single(),
+      localFallback
+    );
   },
 
   async updateIncome(id: string, updates: Partial<IncomeSource>): Promise<void> {
-    if (isSupabaseConfigured() && supabase) {
-      const { error } = await supabase.from('income_sources').update(updates).eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    const list = readLocal<IncomeSource>(KEYS.INCOMES);
-    const updated = list.map(item => item.id === id ? { ...item, ...updates } : item);
-    writeLocal(KEYS.INCOMES, updated);
+    return trySupabaseWrite(
+      () => supabase!.from('income_sources').update(updates).eq('id', id),
+      () => { const list = readLocal<IncomeSource>(KEYS.INCOMES); writeLocal(KEYS.INCOMES, list.map(item => item.id === id ? { ...item, ...updates } : item)); }
+    );
   },
 
   async deleteIncome(id: string): Promise<void> {
-    if (isSupabaseConfigured() && supabase) {
-      const { error } = await supabase.from('income_sources').delete().eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    const list = readLocal<IncomeSource>(KEYS.INCOMES);
-    writeLocal(KEYS.INCOMES, list.filter(item => item.id !== id));
+    return trySupabaseWrite(
+      () => supabase!.from('income_sources').delete().eq('id', id),
+      () => { const list = readLocal<IncomeSource>(KEYS.INCOMES); writeLocal(KEYS.INCOMES, list.filter(item => item.id !== id)); }
+    );
   },
 
   // Expenses
   async getExpenses(userId: string): Promise<Expense[]> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('expenses').select('*').eq('user_id', userId);
-      if (error) return [];
-      return data;
-    }
-    return readLocal<Expense>(KEYS.EXPENSES);
+    return trySupabase<Expense[]>(
+      () => supabase!.from('expenses').select('*').eq('user_id', userId),
+      () => readLocal<Expense>(KEYS.EXPENSES)
+    );
   },
-
   async addExpense(expense: Omit<Expense, 'id' | 'created_at'>): Promise<Expense> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('expenses').insert([expense]).select().single();
-      if (error) throw error;
-      return data;
-    }
-    const list = readLocal<Expense>(KEYS.EXPENSES);
-    const newExpense: Expense = {
-      ...expense,
-      id: `exp-${Date.now()}`,
-      created_at: new Date().toISOString()
-    };
-    list.push(newExpense);
-    writeLocal(KEYS.EXPENSES, list);
-    return newExpense;
+    return trySupabase<Expense>(
+      () => supabase!.from('expenses').insert([expense]).select().single(),
+      () => { const list = readLocal<Expense>(KEYS.EXPENSES); const n: Expense = { ...expense, id: `exp-${Date.now()}`, created_at: new Date().toISOString() }; list.push(n); writeLocal(KEYS.EXPENSES, list); return n; }
+    );
   },
-
   async updateExpense(id: string, updates: Partial<Expense>): Promise<void> {
-    if (isSupabaseConfigured() && supabase) {
-      const { error } = await supabase.from('expenses').update(updates).eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    const list = readLocal<Expense>(KEYS.EXPENSES);
-    const updated = list.map(item => item.id === id ? { ...item, ...updates } : item);
-    writeLocal(KEYS.EXPENSES, updated);
+    return trySupabaseWrite(
+      () => supabase!.from('expenses').update(updates).eq('id', id),
+      () => { const list = readLocal<Expense>(KEYS.EXPENSES); writeLocal(KEYS.EXPENSES, list.map(i => i.id === id ? { ...i, ...updates } : i)); }
+    );
   },
-
   async deleteExpense(id: string): Promise<void> {
-    if (isSupabaseConfigured() && supabase) {
-      const { error } = await supabase.from('expenses').delete().eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    const list = readLocal<Expense>(KEYS.EXPENSES);
-    writeLocal(KEYS.EXPENSES, list.filter(item => item.id !== id));
+    return trySupabaseWrite(
+      () => supabase!.from('expenses').delete().eq('id', id),
+      () => { const list = readLocal<Expense>(KEYS.EXPENSES); writeLocal(KEYS.EXPENSES, list.filter(i => i.id !== id)); }
+    );
   },
 
   // Debts
   async getDebts(userId: string): Promise<Debt[]> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('debts').select('*').eq('user_id', userId);
-      if (error) return [];
-      return data;
-    }
-    return readLocal<Debt>(KEYS.DEBTS);
+    return trySupabase<Debt[]>(
+      () => supabase!.from('debts').select('*').eq('user_id', userId),
+      () => readLocal<Debt>(KEYS.DEBTS)
+    );
   },
-
   async addDebt(debt: Omit<Debt, 'id' | 'created_at'>): Promise<Debt> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('debts').insert([debt]).select().single();
-      if (error) throw error;
-      return data;
-    }
-    const list = readLocal<Debt>(KEYS.DEBTS);
-    const newDebt: Debt = {
-      ...debt,
-      id: `debt-${Date.now()}`,
-      created_at: new Date().toISOString()
-    };
-    list.push(newDebt);
-    writeLocal(KEYS.DEBTS, list);
-    return newDebt;
+    return trySupabase<Debt>(
+      () => supabase!.from('debts').insert([debt]).select().single(),
+      () => { const list = readLocal<Debt>(KEYS.DEBTS); const n: Debt = { ...debt, id: `debt-${Date.now()}`, created_at: new Date().toISOString() }; list.push(n); writeLocal(KEYS.DEBTS, list); return n; }
+    );
   },
-
   async updateDebt(id: string, updates: Partial<Debt>): Promise<void> {
-    if (isSupabaseConfigured() && supabase) {
-      const { error } = await supabase.from('debts').update(updates).eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    const list = readLocal<Debt>(KEYS.DEBTS);
-    const updated = list.map(item => item.id === id ? { ...item, ...updates } : item);
-    writeLocal(KEYS.DEBTS, updated);
+    return trySupabaseWrite(
+      () => supabase!.from('debts').update(updates).eq('id', id),
+      () => { const list = readLocal<Debt>(KEYS.DEBTS); writeLocal(KEYS.DEBTS, list.map(i => i.id === id ? { ...i, ...updates } : i)); }
+    );
   },
-
   async deleteDebt(id: string): Promise<void> {
-    if (isSupabaseConfigured() && supabase) {
-      const { error } = await supabase.from('debts').delete().eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    const list = readLocal<Debt>(KEYS.DEBTS);
-    writeLocal(KEYS.DEBTS, list.filter(item => item.id !== id));
+    return trySupabaseWrite(
+      () => supabase!.from('debts').delete().eq('id', id),
+      () => { const list = readLocal<Debt>(KEYS.DEBTS); writeLocal(KEYS.DEBTS, list.filter(i => i.id !== id)); }
+    );
   },
 
   // Assets
   async getAssets(userId: string): Promise<Asset[]> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('assets').select('*').eq('user_id', userId);
-      if (error) return [];
-      return data;
-    }
-    return readLocal<Asset>(KEYS.ASSETS);
+    return trySupabase<Asset[]>(
+      () => supabase!.from('assets').select('*').eq('user_id', userId),
+      () => readLocal<Asset>(KEYS.ASSETS)
+    );
   },
-
   async addAsset(asset: Omit<Asset, 'id' | 'created_at'>): Promise<Asset> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('assets').insert([asset]).select().single();
-      if (error) throw error;
-      return data;
-    }
-    const list = readLocal<Asset>(KEYS.ASSETS);
-    const newAsset: Asset = {
-      ...asset,
-      id: `asset-${Date.now()}`,
-      created_at: new Date().toISOString()
-    };
-    list.push(newAsset);
-    writeLocal(KEYS.ASSETS, list);
-    return newAsset;
+    return trySupabase<Asset>(
+      () => supabase!.from('assets').insert([asset]).select().single(),
+      () => { const list = readLocal<Asset>(KEYS.ASSETS); const n: Asset = { ...asset, id: `asset-${Date.now()}`, created_at: new Date().toISOString() }; list.push(n); writeLocal(KEYS.ASSETS, list); return n; }
+    );
   },
-
   async updateAsset(id: string, updates: Partial<Asset>): Promise<void> {
-    if (isSupabaseConfigured() && supabase) {
-      const { error } = await supabase.from('assets').update(updates).eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    const list = readLocal<Asset>(KEYS.ASSETS);
-    const updated = list.map(item => item.id === id ? { ...item, ...updates } : item);
-    writeLocal(KEYS.ASSETS, updated);
+    return trySupabaseWrite(
+      () => supabase!.from('assets').update(updates).eq('id', id),
+      () => { const list = readLocal<Asset>(KEYS.ASSETS); writeLocal(KEYS.ASSETS, list.map(i => i.id === id ? { ...i, ...updates } : i)); }
+    );
   },
-
   async deleteAsset(id: string): Promise<void> {
-    if (isSupabaseConfigured() && supabase) {
-      const { error } = await supabase.from('assets').delete().eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    const list = readLocal<Asset>(KEYS.ASSETS);
-    writeLocal(KEYS.ASSETS, list.filter(item => item.id !== id));
+    return trySupabaseWrite(
+      () => supabase!.from('assets').delete().eq('id', id),
+      () => { const list = readLocal<Asset>(KEYS.ASSETS); writeLocal(KEYS.ASSETS, list.filter(i => i.id !== id)); }
+    );
   },
 
   // Reserves
   async getReserves(userId: string): Promise<EmergencyReserve[]> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('emergency_reserves').select('*').eq('user_id', userId);
-      if (error) return [];
-      return data;
-    }
-    return readLocal<EmergencyReserve>(KEYS.RESERVES);
+    return trySupabase<EmergencyReserve[]>(
+      () => supabase!.from('emergency_reserves').select('*').eq('user_id', userId),
+      () => readLocal<EmergencyReserve>(KEYS.RESERVES)
+    );
   },
-
   async addReserve(reserve: Omit<EmergencyReserve, 'id' | 'created_at'>): Promise<EmergencyReserve> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('emergency_reserves').insert([reserve]).select().single();
-      if (error) throw error;
-      return data;
-    }
-    const list = readLocal<EmergencyReserve>(KEYS.RESERVES);
-    const newReserve: EmergencyReserve = {
-      ...reserve,
-      id: `res-${Date.now()}`,
-      created_at: new Date().toISOString()
-    };
-    list.push(newReserve);
-    writeLocal(KEYS.RESERVES, list);
-    return newReserve;
+    return trySupabase<EmergencyReserve>(
+      () => supabase!.from('emergency_reserves').insert([reserve]).select().single(),
+      () => { const list = readLocal<EmergencyReserve>(KEYS.RESERVES); const n: EmergencyReserve = { ...reserve, id: `res-${Date.now()}`, created_at: new Date().toISOString() }; list.push(n); writeLocal(KEYS.RESERVES, list); return n; }
+    );
   },
-
   async updateReserve(id: string, updates: Partial<EmergencyReserve>): Promise<void> {
-    if (isSupabaseConfigured() && supabase) {
-      const { error } = await supabase.from('emergency_reserves').update(updates).eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    const list = readLocal<EmergencyReserve>(KEYS.RESERVES);
-    const updated = list.map(item => item.id === id ? { ...item, ...updates } : item);
-    writeLocal(KEYS.RESERVES, updated);
+    return trySupabaseWrite(
+      () => supabase!.from('emergency_reserves').update(updates).eq('id', id),
+      () => { const list = readLocal<EmergencyReserve>(KEYS.RESERVES); writeLocal(KEYS.RESERVES, list.map(i => i.id === id ? { ...i, ...updates } : i)); }
+    );
   },
-
   async deleteReserve(id: string): Promise<void> {
-    if (isSupabaseConfigured() && supabase) {
-      const { error } = await supabase.from('emergency_reserves').delete().eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    const list = readLocal<EmergencyReserve>(KEYS.RESERVES);
-    writeLocal(KEYS.RESERVES, list.filter(item => item.id !== id));
+    return trySupabaseWrite(
+      () => supabase!.from('emergency_reserves').delete().eq('id', id),
+      () => { const list = readLocal<EmergencyReserve>(KEYS.RESERVES); writeLocal(KEYS.RESERVES, list.filter(i => i.id !== id)); }
+    );
   },
 
   // Goals
   async getGoals(userId: string): Promise<FinancialGoal[]> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('financial_goals').select('*').eq('user_id', userId);
-      if (error) return [];
-      return data;
-    }
-    return readLocal<FinancialGoal>(KEYS.GOALS);
+    return trySupabase<FinancialGoal[]>(
+      () => supabase!.from('financial_goals').select('*').eq('user_id', userId),
+      () => readLocal<FinancialGoal>(KEYS.GOALS)
+    );
   },
-
   async addGoal(goal: Omit<FinancialGoal, 'id' | 'created_at'>): Promise<FinancialGoal> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('financial_goals').insert([goal]).select().single();
-      if (error) throw error;
-      return data;
-    }
-    const list = readLocal<FinancialGoal>(KEYS.GOALS);
-    const newGoal: FinancialGoal = {
-      ...goal,
-      id: `goal-${Date.now()}`,
-      created_at: new Date().toISOString()
-    };
-    list.push(newGoal);
-    writeLocal(KEYS.GOALS, list);
-    return newGoal;
+    return trySupabase<FinancialGoal>(
+      () => supabase!.from('financial_goals').insert([goal]).select().single(),
+      () => { const list = readLocal<FinancialGoal>(KEYS.GOALS); const n: FinancialGoal = { ...goal, id: `goal-${Date.now()}`, created_at: new Date().toISOString() }; list.push(n); writeLocal(KEYS.GOALS, list); return n; }
+    );
   },
-
   async updateGoal(id: string, updates: Partial<FinancialGoal>): Promise<void> {
-    if (isSupabaseConfigured() && supabase) {
-      const { error } = await supabase.from('financial_goals').update(updates).eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    const list = readLocal<FinancialGoal>(KEYS.GOALS);
-    const updated = list.map(item => item.id === id ? { ...item, ...updates } : item);
-    writeLocal(KEYS.GOALS, updated);
+    return trySupabaseWrite(
+      () => supabase!.from('financial_goals').update(updates).eq('id', id),
+      () => { const list = readLocal<FinancialGoal>(KEYS.GOALS); writeLocal(KEYS.GOALS, list.map(i => i.id === id ? { ...i, ...updates } : i)); }
+    );
   },
-
   async deleteGoal(id: string): Promise<void> {
-    if (isSupabaseConfigured() && supabase) {
-      const { error } = await supabase.from('financial_goals').delete().eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    const list = readLocal<FinancialGoal>(KEYS.GOALS);
-    writeLocal(KEYS.GOALS, list.filter(item => item.id !== id));
+    return trySupabaseWrite(
+      () => supabase!.from('financial_goals').delete().eq('id', id),
+      () => { const list = readLocal<FinancialGoal>(KEYS.GOALS); writeLocal(KEYS.GOALS, list.filter(i => i.id !== id)); }
+    );
   },
 
   // Reminders
   async getReminders(userId: string): Promise<Reminder[]> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('reminders').select('*').eq('user_id', userId);
-      if (error) return [];
-      return data;
-    }
-    return readLocal<Reminder>(KEYS.REMINDERS);
+    return trySupabase<Reminder[]>(
+      () => supabase!.from('reminders').select('*').eq('user_id', userId),
+      () => readLocal<Reminder>(KEYS.REMINDERS)
+    );
   },
-
   async addReminder(reminder: Omit<Reminder, 'id' | 'created_at'>): Promise<Reminder> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('reminders').insert([reminder]).select().single();
-      if (error) throw error;
-      return data;
-    }
-    const list = readLocal<Reminder>(KEYS.REMINDERS);
-    const newReminder: Reminder = {
-      ...reminder,
-      id: `rem-${Date.now()}`,
-      created_at: new Date().toISOString()
-    };
-    list.push(newReminder);
-    writeLocal(KEYS.REMINDERS, list);
-    return newReminder;
+    return trySupabase<Reminder>(
+      () => supabase!.from('reminders').insert([reminder]).select().single(),
+      () => { const list = readLocal<Reminder>(KEYS.REMINDERS); const n: Reminder = { ...reminder, id: `rem-${Date.now()}`, created_at: new Date().toISOString() }; list.push(n); writeLocal(KEYS.REMINDERS, list); return n; }
+    );
   },
-
   async updateReminder(id: string, updates: Partial<Reminder>): Promise<void> {
-    if (isSupabaseConfigured() && supabase) {
-      const { error } = await supabase.from('reminders').update(updates).eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    const list = readLocal<Reminder>(KEYS.REMINDERS);
-    const updated = list.map(item => item.id === id ? { ...item, ...updates } : item);
-    writeLocal(KEYS.REMINDERS, updated);
+    return trySupabaseWrite(
+      () => supabase!.from('reminders').update(updates).eq('id', id),
+      () => { const list = readLocal<Reminder>(KEYS.REMINDERS); writeLocal(KEYS.REMINDERS, list.map(i => i.id === id ? { ...i, ...updates } : i)); }
+    );
   },
-
   async deleteReminder(id: string): Promise<void> {
-    if (isSupabaseConfigured() && supabase) {
-      const { error } = await supabase.from('reminders').delete().eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    const list = readLocal<Reminder>(KEYS.REMINDERS);
-    writeLocal(KEYS.REMINDERS, list.filter(item => item.id !== id));
+    return trySupabaseWrite(
+      () => supabase!.from('reminders').delete().eq('id', id),
+      () => { const list = readLocal<Reminder>(KEYS.REMINDERS); writeLocal(KEYS.REMINDERS, list.filter(i => i.id !== id)); }
+    );
   },
 
   // Snapshots
   async getSnapshots(userId: string): Promise<FinancialSnapshot[]> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('financial_snapshots').select('*').eq('user_id', userId).order('snapshot_date', { ascending: true });
-      if (error) return [];
-      return data;
-    }
-    const list = readLocal<FinancialSnapshot>(KEYS.SNAPSHOTS);
-    return list.sort((a, b) => new Date(a.snapshot_date).getTime() - new Date(b.snapshot_date).getTime());
+    return trySupabase<FinancialSnapshot[]>(
+      () => supabase!.from('financial_snapshots').select('*').eq('user_id', userId).order('snapshot_date', { ascending: true }),
+      () => { const list = readLocal<FinancialSnapshot>(KEYS.SNAPSHOTS); return list.sort((a, b) => new Date(a.snapshot_date).getTime() - new Date(b.snapshot_date).getTime()); }
+    );
   },
-
   async addSnapshot(snapshot: Omit<FinancialSnapshot, 'id' | 'created_at'>): Promise<FinancialSnapshot> {
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('financial_snapshots').insert([snapshot]).select().single();
-      if (error) throw error;
-      return data;
-    }
-    const list = readLocal<FinancialSnapshot>(KEYS.SNAPSHOTS);
-    const newSnapshot: FinancialSnapshot = {
-      ...snapshot,
-      id: `snap-${Date.now()}`,
-      created_at: new Date().toISOString()
-    };
-    list.push(newSnapshot);
-    writeLocal(KEYS.SNAPSHOTS, list);
-    return newSnapshot;
+    return trySupabase<FinancialSnapshot>(
+      () => supabase!.from('financial_snapshots').insert([snapshot]).select().single(),
+      () => { const list = readLocal<FinancialSnapshot>(KEYS.SNAPSHOTS); const n: FinancialSnapshot = { ...snapshot, id: `snap-${Date.now()}`, created_at: new Date().toISOString() }; list.push(n); writeLocal(KEYS.SNAPSHOTS, list); return n; }
+    );
   },
-
   async deleteSnapshot(id: string): Promise<void> {
-    if (isSupabaseConfigured() && supabase) {
-      const { error } = await supabase.from('financial_snapshots').delete().eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    const list = readLocal<FinancialSnapshot>(KEYS.SNAPSHOTS);
-    writeLocal(KEYS.SNAPSHOTS, list.filter(item => item.id !== id));
+    return trySupabaseWrite(
+      () => supabase!.from('financial_snapshots').delete().eq('id', id),
+      () => { const list = readLocal<FinancialSnapshot>(KEYS.SNAPSHOTS); writeLocal(KEYS.SNAPSHOTS, list.filter(i => i.id !== id)); }
+    );
   }
 };

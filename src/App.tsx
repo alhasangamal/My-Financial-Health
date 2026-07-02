@@ -16,8 +16,10 @@ import { Reports } from './components/Reports';
 import { Settings } from './components/Settings';
 import { AIForecast } from './components/AIForecast';
 import { Header } from './components/Layout/Header';
+import { motion, AnimatePresence } from 'framer-motion';
+import { AlertTriangle } from 'lucide-react';
 
-import { db, getExchangeRates, fetchLiveExchangeRates } from './services/db';
+import { db, getExchangeRates, fetchLiveExchangeRates, getSyncStatus, subscribeToSyncStatus } from './services/db';
 import { calculateFinancialSummary, isExpenseActiveInMonth, isIncomeActiveInMonth, convertCurrency } from './utils/calculations';
 import { formatCurrency } from './utils/format';
 import { 
@@ -40,6 +42,12 @@ const MainAppContent: React.FC = () => {
 
   // Rollover notifications queue
   const [rolloverAlerts, setRolloverAlerts] = useState<string[]>([]);
+
+  // Cloud sync status tracking
+  const [syncStatus, setSyncStatus] = useState<'connected' | 'degraded' | 'local'>(getSyncStatus());
+  useEffect(() => {
+    return subscribeToSyncStatus((newStatus) => setSyncStatus(newStatus));
+  }, []);
 
   useEffect(() => {
     if (profile?.main_currency) {
@@ -512,8 +520,41 @@ const MainAppContent: React.FC = () => {
             selectedYear={selectedYear}
             onMonthChange={setSelectedMonth}
             onYearChange={setSelectedYear}
+            syncStatus={syncStatus}
           />
-          {renderActiveView()}
+
+          {/* Degraded Sync Warning Banner */}
+          {syncStatus === 'degraded' && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className={`mb-4 p-3 rounded-2xl border flex items-center gap-3 text-xs font-semibold
+                ${theme === 'dark'
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                  : 'bg-amber-50 border-amber-200 text-amber-700'}`}
+            >
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>
+                {language === 'ar'
+                  ? 'تعذّر الاتصال بالسحابة. يتم حفظ بياناتك محلياً مؤقتاً حتى تعود السحابة.'
+                  : 'Cloud connection issue. Your data is being saved locally until the connection is restored.'}
+              </span>
+            </motion.div>
+          )}
+
+          {/* Page transition */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+            >
+              {renderActiveView()}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </main>
 

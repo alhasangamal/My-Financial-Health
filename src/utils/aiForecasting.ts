@@ -116,9 +116,13 @@ export const generateAIForecast = (
   incomeTrendPct = Math.max(-0.2, Math.min(0.2, incomeTrendPct));
   expenseTrendPct = Math.max(-0.15, Math.min(0.2, expenseTrendPct));
 
-  // 3. Project "This Month" (applying half the trend rate to current active stats)
+  // Read user-defined expected inflation rate and convert to monthly factor
+  const annualInflationPct = parseFloat(localStorage.getItem('my_fin_health_inflation_rate') || '12');
+  const monthlyInflationFactor = annualInflationPct > 0 ? (annualInflationPct / 100) / 12 : 0;
+
+  // 3. Project "This Month" (applying half the trend rate + inflation to current active stats)
   const thisMonthIncome = currentIncome * (1 + incomeTrendPct * 0.5);
-  const thisMonthExpenses = currentExpenses * (1 + expenseTrendPct * 0.5);
+  const thisMonthExpenses = currentExpenses * (1 + expenseTrendPct * 0.5 + monthlyInflationFactor);
   const thisMonthSavings = thisMonthIncome - thisMonthExpenses;
   const thisMonthSavingsRate = thisMonthIncome > 0 ? (thisMonthSavings / thisMonthIncome) * 100 : 0;
   const thisMonthLiving = classifyLivingStandard(thisMonthExpenses, thisMonthIncome);
@@ -133,9 +137,9 @@ export const generateAIForecast = (
     livingStandardLabelEn: thisMonthLiving.en,
   };
 
-  // 4. Project "Next Month" (applying full trend rate to this month)
+  // 4. Project "Next Month" (applying full trend rate + inflation to this month)
   const nextMonthIncome = thisMonthIncome * (1 + incomeTrendPct);
-  const nextMonthExpenses = thisMonthExpenses * (1 + expenseTrendPct);
+  const nextMonthExpenses = thisMonthExpenses * (1 + expenseTrendPct + monthlyInflationFactor);
   const nextMonthSavings = nextMonthIncome - nextMonthExpenses;
   const nextMonthSavingsRate = nextMonthIncome > 0 ? (nextMonthSavings / nextMonthIncome) * 100 : 0;
   const nextMonthLiving = classifyLivingStandard(nextMonthExpenses, nextMonthIncome);
