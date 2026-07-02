@@ -299,6 +299,7 @@ const writeLocal = <T>(key: string, items: T[]) => {
 // ─── Cloud Sync Status Tracking ───────────────────────────────────────────────
 type SyncStatus = 'connected' | 'degraded' | 'local';
 type SyncListener = (status: SyncStatus) => void;
+type Awaitable<T> = T | PromiseLike<T>;
 
 let _syncStatus: SyncStatus = isSupabaseConfigured() ? 'connected' : 'local';
 const _syncListeners: SyncListener[] = [];
@@ -324,7 +325,7 @@ export const subscribeToSyncStatus = (listener: SyncListener): (() => void) => {
 // For "get" (read) operations, pass a localFallback that returns the data.
 // For "write" operations, pass a localFallback that performs the write.
 const trySupabase = async <T>(
-  supabaseOp: () => Promise<{ data: T | null; error: any }>,
+  supabaseOp: () => Awaitable<{ data: T | null; error: any }>,
   localFallback: () => T
 ): Promise<T> => {
   if (!isSupabaseConfigured() || !supabase) {
@@ -348,7 +349,7 @@ const trySupabase = async <T>(
 
 // Helper for write operations that don't return data
 const trySupabaseWrite = async (
-  supabaseOp: () => Promise<{ error: any }>,
+  supabaseOp: () => Awaitable<{ error: any }>,
   localFallback: () => void
 ): Promise<void> => {
   if (!isSupabaseConfigured() || !supabase) {
