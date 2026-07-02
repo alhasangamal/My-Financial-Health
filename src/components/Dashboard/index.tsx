@@ -23,10 +23,28 @@ interface DashboardProps {
   rates: Record<string, number>;
   onNavigate: (tabId: string) => void;
   onCompleteReminder: (id: string) => void;
+  selectedMonth?: number;
+  selectedYear?: number;
 }
 
+const MONTHS_NAMES = [
+  { en: 'January', ar: 'يناير' },
+  { en: 'February', ar: 'فبراير' },
+  { en: 'March', ar: 'مارس' },
+  { en: 'April', ar: 'أبريل' },
+  { en: 'May', ar: 'مايو' },
+  { en: 'June', ar: 'يونيو' },
+  { en: 'July', ar: 'يوليو' },
+  { en: 'August', ar: 'أغسطس' },
+  { en: 'September', ar: 'سبتمبر' },
+  { en: 'October', ar: 'أكتوبر' },
+  { en: 'November', ar: 'نوفمبر' },
+  { en: 'December', ar: 'ديسمبر' }
+];
+
 export const Dashboard: React.FC<DashboardProps> = ({ 
-  summary, debts, expenses, reminders, rates, onNavigate, onCompleteReminder 
+  summary, debts, expenses, reminders, rates, onNavigate, onCompleteReminder,
+  selectedMonth, selectedYear
 }) => {
   const { t, language, dir } = useTranslation();
   const { theme } = useTheme();
@@ -242,7 +260,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     let monthlyAmount = exp.amount;
     if (exp.frequency === 'weekly') monthlyAmount = exp.amount * 4.33;
     else if (exp.frequency === 'annual') monthlyAmount = exp.amount / 12;
-    else if (exp.frequency === 'one-time') return 0;
+    else if (exp.frequency === 'one-time') monthlyAmount = exp.amount; // Count one-time expenses fully in the selected month
     
     // convert to base
     const ratesForConv = rates;
@@ -537,6 +555,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="flex-1 text-center md:text-start space-y-2">
           <div className="flex flex-col md:flex-row items-center gap-3">
             <h2 className="text-xl font-bold">{t('financialCondition')}</h2>
+            {selectedMonth && selectedYear && (
+              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-500 border border-emerald-500/20">
+                {MONTHS_NAMES[selectedMonth - 1][language === 'ar' ? 'ar' : 'en']} {selectedYear}
+              </span>
+            )}
             <span className={`px-3 py-1 rounded-full text-xs font-bold border 
               ${theme === 'dark' ? getStatusBgDark(summary.financialStatus) : getStatusBgLight(summary.financialStatus)}`}
             >

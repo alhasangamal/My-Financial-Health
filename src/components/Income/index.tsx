@@ -11,9 +11,29 @@ interface IncomeProps {
   onAdd: (income: Omit<IncomeSource, 'id' | 'created_at'>) => Promise<void>;
   onEdit: (id: string, updates: Partial<IncomeSource>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  selectedMonth: number;
+  selectedYear: number;
 }
 
-export const Income: React.FC<IncomeProps> = ({ incomes, onAdd, onEdit, onDelete }) => {
+const MONTHS_NAMES = [
+  { en: 'January', ar: 'يناير' },
+  { en: 'February', ar: 'فبراير' },
+  { en: 'March', ar: 'مارس' },
+  { en: 'April', ar: 'أبريل' },
+  { en: 'May', ar: 'مايو' },
+  { en: 'June', ar: 'يونيو' },
+  { en: 'July', ar: 'يوليو' },
+  { en: 'August', ar: 'أغسطس' },
+  { en: 'September', ar: 'سبتمبر' },
+  { en: 'October', ar: 'أكتوبر' },
+  { en: 'November', ar: 'نوفمبر' },
+  { en: 'December', ar: 'ديسمبر' }
+];
+
+export const Income: React.FC<IncomeProps> = ({ 
+  incomes, onAdd, onEdit, onDelete,
+  selectedMonth, selectedYear
+}) => {
   const { t, language, dir } = useTranslation();
   const { theme } = useTheme();
   const { profile } = useAuth();
@@ -127,7 +147,12 @@ export const Income: React.FC<IncomeProps> = ({ incomes, onAdd, onEdit, onDelete
       {/* Title Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold">{t('income')}</h2>
+          <h2 className="text-xl font-bold">
+            {t('income')}{' '}
+            <span className="text-emerald-500 text-sm font-semibold">
+              ({MONTHS_NAMES[selectedMonth - 1][language === 'ar' ? 'ar' : 'en']} {selectedYear})
+            </span>
+          </h2>
           <span className="text-xs opacity-60">
             {language === 'ar' ? 'أضف وتحكم في جميع مصادر دخلك المالي' : 'Add and manage all your financial income streams'}
           </span>

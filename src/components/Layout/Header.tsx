@@ -2,18 +2,44 @@ import React from 'react';
 import { useTranslation } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
 import { CurrencyCode } from '../../types';
-import { Sun, Moon, Coins, Languages } from 'lucide-react';
+import { Sun, Moon, Coins, Languages, Calendar } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: string;
   currentCurrency: CurrencyCode;
   onCurrencyChange: (currency: CurrencyCode) => void;
+  selectedMonth: number;
+  selectedYear: number;
+  onMonthChange: (month: number) => void;
+  onYearChange: (year: number) => void;
 }
+
+const MONTHS = [
+  { value: 1, en: 'January', ar: 'يناير' },
+  { value: 2, en: 'February', ar: 'فبراير' },
+  { value: 3, en: 'March', ar: 'مارس' },
+  { value: 4, en: 'April', ar: 'أبريل' },
+  { value: 5, en: 'May', ar: 'مايو' },
+  { value: 6, en: 'June', ar: 'يونيو' },
+  { value: 7, en: 'July', ar: 'يوليو' },
+  { value: 8, en: 'August', ar: 'أغسطس' },
+  { value: 9, en: 'September', ar: 'سبتمبر' },
+  { value: 10, en: 'October', ar: 'أكتوبر' },
+  { value: 11, en: 'November', ar: 'نوفمبر' },
+  { value: 12, en: 'December', ar: 'ديسمبر' }
+];
+
+const currentYear = new Date().getFullYear();
+const YEARS = Array.from({ length: 7 }, (_, i) => currentYear - 3 + i);
 
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
   currentCurrency,
   onCurrencyChange,
+  selectedMonth,
+  selectedYear,
+  onMonthChange,
+  onYearChange,
 }) => {
   const { t, language, setLanguage, dir } = useTranslation();
   const { theme, toggleTheme } = useTheme();
@@ -53,8 +79,45 @@ export const Header: React.FC<HeaderProps> = ({
         </span>
       </div>
 
-      {/* Header Actions (Currency, Theme, Language) */}
-      <div className="flex items-center gap-3 w-full sm:w-auto justify-center sm:justify-end text-xs">
+      {/* Header Actions (Date, Currency, Theme, Language) */}
+      <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-center sm:justify-end text-xs">
+        {/* Month/Year Selector */}
+        <div className="flex items-center gap-1.5">
+          <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/10">
+            <Calendar className="w-4 h-4" />
+          </div>
+          <div className="flex items-center gap-1">
+            <select
+              value={selectedMonth}
+              onChange={(e) => onMonthChange(Number(e.target.value))}
+              className={`px-2 py-1.5 rounded-xl border font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer
+                ${theme === 'dark' 
+                  ? 'bg-slate-900 border-slate-800 text-slate-200 focus:border-emerald-500' 
+                  : 'bg-slate-50 border-slate-200 text-slate-700 focus:border-emerald-500'}`}
+            >
+              {MONTHS.map(m => (
+                <option key={m.value} value={m.value}>{isAr ? m.ar : m.en}</option>
+              ))}
+            </select>
+
+            <select
+              value={selectedYear}
+              onChange={(e) => onYearChange(Number(e.target.value))}
+              className={`px-2 py-1.5 rounded-xl border font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer
+                ${theme === 'dark' 
+                  ? 'bg-slate-900 border-slate-800 text-slate-200 focus:border-emerald-500' 
+                  : 'bg-slate-50 border-slate-200 text-slate-700 focus:border-emerald-500'}`}
+            >
+              {YEARS.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="h-6 w-px bg-slate-800/10 dark:bg-slate-800/60" />
+
         {/* Currency Switcher */}
         <div className="flex items-center gap-1.5">
           <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/10">

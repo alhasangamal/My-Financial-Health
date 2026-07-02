@@ -18,6 +18,21 @@ const CATEGORIES = [
   'cat_entertainment', 'cat_subscriptions', 'cat_travel', 'cat_charity', 'cat_shopping', 'cat_other'
 ];
 
+const MONTHS_NAMES = [
+  { en: 'January', ar: 'يناير' },
+  { en: 'February', ar: 'فبراير' },
+  { en: 'March', ar: 'مارس' },
+  { en: 'April', ar: 'أبريل' },
+  { en: 'May', ar: 'مايو' },
+  { en: 'June', ar: 'يونيو' },
+  { en: 'July', ar: 'يوليو' },
+  { en: 'August', ar: 'أغسطس' },
+  { en: 'September', ar: 'سبتمبر' },
+  { en: 'October', ar: 'أكتوبر' },
+  { en: 'November', ar: 'نوفمبر' },
+  { en: 'December', ar: 'ديسمبر' }
+];
+
 interface ReportsProps {
   summary: FinancialSummary;
   incomes: IncomeSource[];
@@ -128,7 +143,7 @@ export const Reports: React.FC<ReportsProps> = ({
       let val = exp.amount;
       if (exp.frequency === 'annual') val = exp.amount / 12;
       else if (exp.frequency === 'weekly') val = exp.amount * 4.33;
-      else if (exp.frequency === 'one-time') return acc;
+      else if (exp.frequency === 'one-time') val = exp.amount; // Count one-time fully in the month it occurred
       
       // Convert to main currency dynamically
       const rates = getExchangeRates();
@@ -150,7 +165,7 @@ export const Reports: React.FC<ReportsProps> = ({
     let val = exp.amount;
     if (exp.frequency === 'annual') val = exp.amount / 12;
     else if (exp.frequency === 'weekly') val = exp.amount * 4.33;
-    else if (exp.frequency === 'one-time') return acc;
+    else if (exp.frequency === 'one-time') val = exp.amount; // Count one-time fully in the month it occurred
     
     const rates = getExchangeRates();
     const rateFrom = rates[exp.currency] || 1;
@@ -202,6 +217,33 @@ export const Reports: React.FC<ReportsProps> = ({
   const budgetedCats = CATEGORIES.filter(cat => (categoryBudgets[cat] || 0) > 0);
   const compliantCats = budgetedCats.filter(cat => (categorySpentMap[cat] || 0) <= categoryBudgets[cat]);
   const compliancePercent = budgetedCats.length > 0 ? (compliantCats.length / budgetedCats.length) * 100 : 100;
+
+  // Find month with highest surplus and month with highest expenses from snapshots
+  let highestSurplusMonth = '';
+  let highestSurplusValue = -Infinity;
+  let highestExpensesMonth = '';
+  let highestExpensesValue = -Infinity;
+
+  snapshots.forEach(s => {
+    if (s.monthly_surplus > highestSurplusValue) {
+      highestSurplusValue = s.monthly_surplus;
+      highestSurplusMonth = s.snapshot_date;
+    }
+    const totalExp = s.total_expenses + s.total_installments;
+    if (totalExp > highestExpensesValue) {
+      highestExpensesValue = totalExp;
+      highestExpensesMonth = s.snapshot_date;
+    }
+  });
+
+  const formatSnapshotMonth = (dateStr: string) => {
+    if (!dateStr) return isAr ? 'غير متوفر' : 'N/A';
+    const date = new Date(dateStr);
+    const m = date.getMonth(); // 0-11
+    const y = date.getFullYear();
+    const mName = MONTHS_NAMES[m] ? (isAr ? MONTHS_NAMES[m].ar : MONTHS_NAMES[m].en) : '';
+    return `${mName} ${y}`;
+  };
 
   return (
     <div className="space-y-6 print:p-0">
@@ -323,6 +365,51 @@ export const Reports: React.FC<ReportsProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Historical Achievements & Records */}
+      {snapshots.length > 0 && highestSurplusMonth && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4.5 print:hidden">
+          {/* Highest Surplus Month */}
+          <div className={`p-4.5 rounded-3xl border shadow-lg flex items-center justify-between gap-4 hover:scale-[1.01] transition-transform
+            ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80 shadow-slate-950/20' : 'bg-white border-slate-200 shadow-sm'}`}
+          >
+            <div className="space-y-1 text-start">
+              <span className="text-[10px] opacity-60 font-bold block uppercase tracking-wider text-emerald-500">
+                {isAr ? '🏆 الشهر الأكثر فائضاً (ادخاراً)' : '🏆 Month with Highest Surplus'}
+              </span>
+              <span className={`text-base font-extrabold tracking-tight block ${theme === 'dark' ? 'text-slate-50' : 'text-slate-900'}`}>
+                {formatCurrency(Math.round(highestSurplusValue), baseCurrency, language)}
+              </span>
+              <span className="text-[11px] opacity-80 font-medium block">
+                {isAr ? 'شهر الأداء:' : 'Performance Month:'} <span className="text-emerald-500 font-bold">{formatSnapshotMonth(highestSurplusMonth)}</span>
+              </span>
+            </div>
+            <div className="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-500 shrink-0">
+              <Award className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* Highest Expenses Month */}
+          <div className={`p-4.5 rounded-3xl border shadow-lg flex items-center justify-between gap-4 hover:scale-[1.01] transition-transform
+            ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80 shadow-slate-950/20' : 'bg-white border-slate-200 shadow-sm'}`}
+          >
+            <div className="space-y-1 text-start">
+              <span className="text-[10px] opacity-60 font-bold block uppercase tracking-wider text-rose-500">
+                {isAr ? '🔥 الشهر الأكثر نفقات ومصاريف' : '🔥 Month with Highest Expenses'}
+              </span>
+              <span className={`text-base font-extrabold tracking-tight block ${theme === 'dark' ? 'text-slate-50' : 'text-slate-900'}`}>
+                {formatCurrency(Math.round(highestExpensesValue), baseCurrency, language)}
+              </span>
+              <span className="text-[11px] opacity-80 font-medium block">
+                {isAr ? 'شهر الصرف الأكبر:' : 'Peak Spending Month:'} <span className="text-rose-500 font-bold">{formatSnapshotMonth(highestExpensesMonth)}</span>
+              </span>
+            </div>
+            <div className="p-2.5 rounded-2xl bg-rose-500/10 text-rose-500 shrink-0">
+              <Activity className="w-5 h-5" />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Print ONLY header */}
       <div className="hidden print:block text-center space-y-2 border-b pb-4 mb-6">

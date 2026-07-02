@@ -74,6 +74,108 @@ export const getMonthlyExpenseInBase = (
   return convertCurrency(monthlyAmount, expense.currency, targetCurrency, rates);
 };
 
+// Check if an expense is active/occurred in a specific month and year
+export const isExpenseActiveInMonth = (exp: Expense, year: number, month: number): boolean => {
+  const startDate = new Date(exp.start_date);
+  if (isNaN(startDate.getTime())) return false;
+  
+  const startYear = startDate.getFullYear();
+  const startMonth = startDate.getMonth() + 1; // 1-12
+  
+  if (exp.frequency === 'one-time') {
+    return startYear === year && startMonth === month;
+  }
+  
+  // Recurring expenses (monthly, weekly, annual)
+  const isAfterStart = year > startYear || (year === startYear && month >= startMonth);
+  
+  let isBeforeEnd = true;
+  if (exp.end_date) {
+    const endDate = new Date(exp.end_date);
+    if (!isNaN(endDate.getTime())) {
+      const endYear = endDate.getFullYear();
+      const endMonth = endDate.getMonth() + 1;
+      isBeforeEnd = year < endYear || (year === endYear && month <= endMonth);
+    }
+  }
+  
+  return isAfterStart && isBeforeEnd;
+};
+
+// Get monthly expense amount for a specific month/year
+export const getMonthlyExpenseInMonth = (
+  expense: Expense,
+  year: number,
+  month: number,
+  targetCurrency: string,
+  rates: Record<string, number>
+): number => {
+  let amount = expense.amount;
+  if (expense.frequency === 'weekly') {
+    amount = expense.amount * 4.33;
+  } else if (expense.frequency === 'annual') {
+    amount = expense.amount / 12;
+  } else if (expense.frequency === 'one-time') {
+    // One-time expenses count fully in the month they occurred
+    amount = expense.amount;
+  }
+  return convertCurrency(amount, expense.currency, targetCurrency, rates);
+};
+
+// Check if an income is active/occurred in a specific month and year
+export const isIncomeActiveInMonth = (income: IncomeSource, year: number, month: number): boolean => {
+  const startDate = new Date(income.start_date);
+  if (isNaN(startDate.getTime())) return false;
+  
+  const startYear = startDate.getFullYear();
+  const startMonth = startDate.getMonth() + 1; // 1-12
+  
+  if (income.frequency === 'one-time') {
+    return startYear === year && startMonth === month;
+  }
+  
+  // Recurring incomes (monthly, weekly, annual)
+  const isAfterStart = year > startYear || (year === startYear && month >= startMonth);
+  
+  let isBeforeEnd = true;
+  if (income.end_date) {
+    const endDate = new Date(income.end_date);
+    if (!isNaN(endDate.getTime())) {
+      const endYear = endDate.getFullYear();
+      const endMonth = endDate.getMonth() + 1;
+      isBeforeEnd = year < endYear || (year === endYear && month <= endMonth);
+    }
+  }
+  
+  return isAfterStart && isBeforeEnd;
+};
+
+// Get monthly income amount for a specific month/year
+export const getMonthlyIncomeInMonth = (
+  income: IncomeSource,
+  year: number,
+  month: number,
+  targetCurrency: string,
+  rates: Record<string, number>
+): number => {
+  let amount = income.amount;
+  if (income.frequency === 'weekly') {
+    amount = income.amount * 4.33;
+  } else if (income.frequency === 'annual') {
+    amount = income.amount / 12;
+  } else if (income.frequency === 'one-time') {
+    // One-time income counts fully in the month it occurred
+    amount = income.amount;
+  }
+  
+  if (income.currency !== targetCurrency) {
+    if (income.exchange_rate && income.exchange_rate !== 1) {
+      return amount / income.exchange_rate;
+    }
+    return convertCurrency(amount, income.currency, targetCurrency, rates);
+  }
+  return amount;
+};
 
 export const calculateFinancialSummary = (
   incomes: IncomeSource[],
@@ -82,22 +184,34 @@ export const calculateFinancialSummary = (
   assets: Asset[],
   reserves: EmergencyReserve[],
   targetCurrency: string,
-  rates: Record<string, number>
+  rates: Record<string, number>,
+  year?: number,
+  month?: number
 ): FinancialSummary => {
+  const current = new Date();
+  const targetYear = year !== undefined ? year : current.getFullYear();
+  const targetMonth = month !== undefined ? month : current.getMonth() + 1;
+
+  // Filter and convert incomes active in target month/year
+  const activeIncomes = incomes.filter(inc => isIncomeActiveInMonth(inc, targetYear, targetMonth));
+  
+  // Filter and convert expenses active in target month/year
+  const activeExpenses = expenses.filter(exp => isExpenseActiveInMonth(exp, targetYear, targetMonth));
+
   // 1. Total Monthly Income
-  const totalMonthlyIncome = incomes.reduce((sum, inc) => {
-    return sum + getMonthlyIncomeInBase(inc, targetCurrency, rates);
+  const totalMonthlyIncome = activeIncomes.reduce((sum, inc) => {
+    return sum + getMonthlyIncomeInMonth(inc, targetYear, targetMonth, targetCurrency, rates);
   }, 0);
 
   // 2. Total Monthly Expenses
-  const totalMonthlyExpenses = expenses.reduce((sum, exp) => {
-    return sum + getMonthlyExpenseInBase(exp, targetCurrency, rates);
+  const totalMonthlyExpenses = activeExpenses.reduce((sum, exp) => {
+    return sum + getMonthlyExpenseInMonth(exp, targetYear, targetMonth, targetCurrency, rates);
   }, 0);
 
-  const totalEssentialExpenses = expenses
+  const totalEssentialExpenses = activeExpenses
     .filter(exp => exp.is_essential)
     .reduce((sum, exp) => {
-      return sum + getMonthlyExpenseInBase(exp, targetCurrency, rates);
+      return sum + getMonthlyExpenseInMonth(exp, targetYear, targetMonth, targetCurrency, rates);
     }, 0);
 
   const totalOptionalExpenses = totalMonthlyExpenses - totalEssentialExpenses;

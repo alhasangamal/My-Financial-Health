@@ -12,6 +12,8 @@ interface ExpensesProps {
   onAdd: (expense: Omit<Expense, 'id' | 'created_at'>) => Promise<void>;
   onEdit: (id: string, updates: Partial<Expense>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  selectedMonth: number;
+  selectedYear: number;
 }
 
 const CATEGORIES = [
@@ -21,7 +23,25 @@ const CATEGORIES = [
   'cat_entertainment', 'cat_subscriptions', 'cat_travel', 'cat_charity', 'cat_shopping', 'cat_other'
 ];
 
-export const Expenses: React.FC<ExpensesProps> = ({ expenses, onAdd, onEdit, onDelete }) => {
+const MONTHS_NAMES = [
+  { en: 'January', ar: 'يناير' },
+  { en: 'February', ar: 'فبراير' },
+  { en: 'March', ar: 'مارس' },
+  { en: 'April', ar: 'أبريل' },
+  { en: 'May', ar: 'مايو' },
+  { en: 'June', ar: 'يونيو' },
+  { en: 'July', ar: 'يوليو' },
+  { en: 'August', ar: 'أغسطس' },
+  { en: 'September', ar: 'سبتمبر' },
+  { en: 'October', ar: 'أكتوبر' },
+  { en: 'November', ar: 'نوفمبر' },
+  { en: 'December', ar: 'ديسمبر' }
+];
+
+export const Expenses: React.FC<ExpensesProps> = ({ 
+  expenses, onAdd, onEdit, onDelete,
+  selectedMonth, selectedYear
+}) => {
   const { t, language, dir } = useTranslation();
   const { theme } = useTheme();
   const { profile, updateProfile } = useAuth();
@@ -175,7 +195,7 @@ export const Expenses: React.FC<ExpensesProps> = ({ expenses, onAdd, onEdit, onD
     let monthlyAmount = exp.amount;
     if (exp.frequency === 'weekly') monthlyAmount = exp.amount * 4.33;
     else if (exp.frequency === 'annual') monthlyAmount = exp.amount / 12;
-    else if (exp.frequency === 'one-time') return acc; // skip one-time in monthly recurring budgets
+    else if (exp.frequency === 'one-time') monthlyAmount = exp.amount; // Count one-time fully in the month it occurred
 
     const rateFrom = rates[exp.currency] || 1;
     const rateTo = rates[baseCurrency] || 1;
@@ -224,7 +244,12 @@ export const Expenses: React.FC<ExpensesProps> = ({ expenses, onAdd, onEdit, onD
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold">{t('expenses')}</h2>
+          <h2 className="text-xl font-bold">
+            {t('expenses')}{' '}
+            <span className="text-emerald-500 text-sm font-semibold">
+              ({MONTHS_NAMES[selectedMonth - 1][language === 'ar' ? 'ar' : 'en']} {selectedYear})
+            </span>
+          </h2>
           <span className="text-xs opacity-60">
             {language === 'ar' ? 'تتبع مصاريفك الدورية وصنفها لتفهم أين تذهب أموالك' : 'Track and categorize your expenses to understand where your money goes'}
           </span>
